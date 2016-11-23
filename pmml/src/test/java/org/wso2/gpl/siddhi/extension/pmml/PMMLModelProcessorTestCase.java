@@ -59,14 +59,13 @@ public class PMMLModelProcessorTestCase {
                 "insert into outputStream ;";
 
         ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(inputStream + query);
-
         executionPlanRuntime.addCallback("query1", new QueryCallback() {
             @Override
             public void receive(long timeStamp, Event[] inEvents, Event[] removeEvents) {
                 EventPrinter.print(timeStamp, inEvents, removeEvents);
                 eventArrived = true;
                 if (inEvents != null) {
-                    isSuccessfullyExecuted = inEvents[0].getData(13).equals("1");
+                    isSuccessfullyExecuted = inEvents[0].getData(13).toString().equals("1.0");
                 }
             }
 
@@ -105,7 +104,7 @@ public class PMMLModelProcessorTestCase {
                 EventPrinter.print(timeStamp, inEvents, removeEvents);
                 eventArrived = true;
                 if (inEvents != null) {
-                    isSuccessfullyExecuted = inEvents[0].getData(0).equals("1");
+                    isSuccessfullyExecuted = inEvents[0].getData(0).toString().equals("1.0");
                 }
             }
 
@@ -144,7 +143,7 @@ public class PMMLModelProcessorTestCase {
                 EventPrinter.print(timeStamp, inEvents, removeEvents);
                 eventArrived = true;
                 if (inEvents != null) {
-                    isSuccessfullyExecuted = inEvents[0].getData(13).equals("1");
+                    isSuccessfullyExecuted = inEvents[0].getData(13).toString().equals("1.0");
                 }
             }
 
@@ -183,7 +182,7 @@ public class PMMLModelProcessorTestCase {
                 EventPrinter.print(timeStamp, inEvents, removeEvents);
                 eventArrived = true;
                 if (inEvents != null) {
-                    isSuccessfullyExecuted = inEvents[0].getData(13).equals("1");
+                    isSuccessfullyExecuted = inEvents[0].getData(13).toString().equals("1.0");
                 }
             }
 
@@ -215,13 +214,12 @@ public class PMMLModelProcessorTestCase {
                 "insert into outputStream ;";
 
         ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(inputStream + query);
-
         executionPlanRuntime.addCallback("query1", new QueryCallback() {
             @Override public void receive(long timeStamp, Event[] inEvents, Event[] removeEvents) {
                 EventPrinter.print(timeStamp, inEvents, removeEvents);
                 eventArrived = true;
                 if (inEvents != null) {
-                    isSuccessfullyExecuted = inEvents[0].getData(8).equals(5.216788478335122);
+                    isSuccessfullyExecuted = inEvents[0].getData(0).toString().equals("1.0");
                 }
             }
 

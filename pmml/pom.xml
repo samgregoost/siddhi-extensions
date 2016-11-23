@@ -74,7 +74,10 @@
 	</dependencies>
 
 	<properties>
-		<pmml.evaluator.version>1.1.16.wso2v1</pmml.evaluator.version>
+		<pmml.model.version>1.3.3.wso2v1</pmml.model.version>
+		<pmml.manager.version>1.1.20.wso2v1</pmml.manager.version>
+		<pmml.evaluator.version>1.3.2.wso2v1</pmml.evaluator.version>
+		<pmml.schema.version>1.3.3.wso2v1</pmml.schema.version>
 	</properties>
 
 	<build>
@@ -92,9 +95,9 @@
 						</Export-Package>
 						<Import-Package>
 							org.jpmml.evaluator.*; version="${pmml.evaluator.version}",
-							org.jpmml.manager.*; version="${pmml.evaluator.version}",
-							org.jpmml.model.*; version="${pmml.evaluator.version}",
-							org.jpmml.schema.*; version="${pmml.evaluator.version}"
+							org.jpmml.manager.*; version="${pmml.manager.version}",
+							org.jpmml.model.*; version="${pmml.model.version}",
+							org.jpmml.schema.*; version="${pmml.schema.version}"
 						</Import-Package>
 						<DynamicImport-Package>*</DynamicImport-Package>
 					</instructions>

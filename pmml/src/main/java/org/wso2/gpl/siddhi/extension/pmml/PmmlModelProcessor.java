@@ -18,8 +18,9 @@
 
 package org.wso2.gpl.siddhi.extension.pmml;
 
-import org.jpmml.evaluator.EvaluatorUtil;
-import org.jpmml.evaluator.FieldValue;
+import org.dmg.pmml.*;
+import org.jpmml.evaluator.*;
+import org.jpmml.evaluator.OutputField;
 import org.wso2.siddhi.core.config.ExecutionPlanContext;
 import org.wso2.siddhi.core.event.ComplexEventChunk;
 import org.wso2.siddhi.core.event.stream.StreamEvent;
@@ -39,11 +40,6 @@ import org.xml.sax.InputSource;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.dmg.pmml.FieldName;
-import org.dmg.pmml.PMML;
-import org.jpmml.evaluator.Evaluator;
-import org.jpmml.evaluator.ModelEvaluatorFactory;
-import org.jpmml.manager.PMMLManager;
 import org.jpmml.model.ImportFilter;
 import org.jpmml.model.JAXBUtil;
 
@@ -60,10 +56,10 @@ public class PmmlModelProcessor extends StreamProcessor {
 
     private String pmmlDefinition;
     private boolean attributeSelectionAvailable;
-    private Map<FieldName, int[]> attributeIndexMap;           // <feature-name, [event-array-type][attribute-index]> pairs
+    private Map<InputField, int[]> attributeIndexMap;           // <feature-name, [event-array-type][attribute-index]> pairs
     
-    private List<FieldName> inputFields;        // All the input fields defined in the pmml definition
-    private List<FieldName> outputFields;       // Output fields of the pmml definition
+    private List<InputField> inputFields;        // All the input fields defined in the pmml definition
+    private List<OutputField> outputFields;// Output fields of the pmml definition
     private Evaluator evaluator;
 
     @Override
@@ -72,8 +68,8 @@ public class PmmlModelProcessor extends StreamProcessor {
         StreamEvent event = streamEventChunk.getFirst();
         Map<FieldName, FieldValue> inData = new HashMap<FieldName, FieldValue>();
 
-        for (Map.Entry<FieldName, int[]> entry : attributeIndexMap.entrySet()) {
-            FieldName featureName = entry.getKey();
+        for (Map.Entry<InputField, int[]> entry : attributeIndexMap.entrySet()) {
+            FieldName featureName = entry.getKey().getName();
             int[] attributeIndexArray = entry.getValue();
             Object dataValue = null;
             switch (attributeIndexArray[2]) {
@@ -84,18 +80,27 @@ public class PmmlModelProcessor extends StreamProcessor {
                     dataValue = event.getOutputData()[attributeIndexArray[3]];
                     break;
             }
-            inData.put(featureName, EvaluatorUtil.prepare(evaluator, featureName, String.valueOf(dataValue)));
+            FieldValue inputFieldValue = entry.getKey().prepare(dataValue);
+            inData.put(featureName, inputFieldValue);
         }
 
         if (!inData.isEmpty()) {
             try {
                 Map<FieldName, ?> result = evaluator.evaluate(inData);
-                Object[] output = new Object[result.size()];
+                Map<FieldName, ?> finalResult = new LinkedHashMap(result);
+                int excessData = result.size() - outputFields.size();
+                Object[] output = new Object[result.size()-excessData];
+
                 int i = 0;
+                int excessCounter = 0;
                 for (FieldName fieldName : result.keySet()) {
-                    output[i] = EvaluatorUtil.decode(result.get(fieldName));
-                    i++;
+                    if(excessCounter >= excessData){
+                        output[i] = EvaluatorUtil.decode(result.get(fieldName));
+                        i++;
+                    }
+                    excessCounter++;
                 }
+
                 complexEventPopulater.populateComplexEvent(event, output);
                 nextProcessor.process(streamEventChunk);
             } catch (Exception e) {
@@ -127,16 +132,13 @@ public class PmmlModelProcessor extends StreamProcessor {
         // Unmarshal the definition and get an executable pmml model
         PMML pmmlModel = unmarshal(pmmlDefinition);
         // Get the different types of fields defined in the pmml model
-        PMMLManager pmmlManager = new PMMLManager(pmmlModel);
-        
-        evaluator = (Evaluator) pmmlManager.getModelManager(ModelEvaluatorFactory.getInstance());
-        inputFields = evaluator.getActiveFields();
-        if (evaluator.getOutputFields().size() == 0) {
-            outputFields = evaluator.getTargetFields();
-        } else {
-            outputFields = evaluator.getOutputFields();
-        }
 
+        org.jpmml.evaluator.ModelEvaluatorFactory modelEvaluatorFactory = org.jpmml.evaluator.ModelEvaluatorFactory.newInstance();
+        org.jpmml.evaluator.ModelEvaluator<?> modelEvaluator = modelEvaluatorFactory.newModelEvaluator(pmmlModel);
+        evaluator = modelEvaluator;
+
+        inputFields = evaluator.getActiveFields();
+        outputFields = evaluator.getOutputFields();
         return generateOutputAttributes();
     }
 
@@ -145,38 +147,42 @@ public class PmmlModelProcessor extends StreamProcessor {
      * @return
      */
     private List<Attribute> generateOutputAttributes() {
-
+        int numOfOutputFields;
         List<Attribute> outputAttributes = new ArrayList<Attribute>();
-        int numOfOutputFields = evaluator.getOutputFields().size();
-        for (FieldName field : outputFields) {
-            String dataType;
-            if (numOfOutputFields == 0) {
-                dataType = evaluator.getDataField(field).getDataType().toString();
-            } else {
-                // If dataType attribute is missing, consider dataType as string(temporary fix).
-                if (evaluator.getOutputField(field).getDataType() == null) {
-                    log.info("Attribute dataType missing for OutputField. Using String as dataType");
-                    dataType = "string";
+        if(outputFields != null){
+            numOfOutputFields =  evaluator.getOutputFields().size();
+            for (OutputField field : outputFields) {
+                String dataType;
+                org.dmg.pmml.OutputField pmmlOutputField = field.getOutputField();
+                if (numOfOutputFields == 0) {
+                    dataType = field.getDataType().toString();
                 } else {
-                    dataType = evaluator.getOutputField(field).getDataType().toString();
+                    // If dataType attribute is missing, consider dataType as string(temporary fix).
+                    if (field.getDataType() == null) {
+                        log.info("Attribute dataType missing for OutputField. Using String as dataType");
+                        dataType = "string";
+                    } else {
+                        dataType = field.getDataType().toString();
+                    }
                 }
+                Attribute.Type type = null;
+                if (dataType.equalsIgnoreCase("double")) {
+                    type = Attribute.Type.DOUBLE;
+                } else if (dataType.equalsIgnoreCase("float")) {
+                    type = Attribute.Type.FLOAT;
+                } else if (dataType.equalsIgnoreCase("integer")) {
+                    type = Attribute.Type.INT;
+                } else if (dataType.equalsIgnoreCase("long")) {
+                    type = Attribute.Type.LONG;
+                } else if (dataType.equalsIgnoreCase("boolean")) {
+                    type = Attribute.Type.BOOL;
+                } else if (dataType.equalsIgnoreCase("string")) {
+                    type = Attribute.Type.STRING;
+                }
+                outputAttributes.add(new Attribute(field.getName().toString() , type));
             }
-            Attribute.Type type = null;
-            if (dataType.equalsIgnoreCase("double")) {
-                type = Attribute.Type.DOUBLE;
-            } else if (dataType.equalsIgnoreCase("float")) {
-                type = Attribute.Type.FLOAT;
-            } else if (dataType.equalsIgnoreCase("integer")) {
-                type = Attribute.Type.INT;
-            } else if (dataType.equalsIgnoreCase("long")) {
-                type = Attribute.Type.LONG;
-            } else if (dataType.equalsIgnoreCase("boolean")) {
-                type = Attribute.Type.BOOL;
-            } else if (dataType.equalsIgnoreCase("string")) {
-                type = Attribute.Type.STRING;
-            }
-            outputAttributes.add(new Attribute(field.getValue(), type));
         }
+
         return outputAttributes;
     }
 
@@ -196,11 +202,11 @@ public class PmmlModelProcessor extends StreamProcessor {
      */
     private void populateFeatureAttributeMapping() throws Exception {
 
-        attributeIndexMap = new HashMap<FieldName, int[]>();
-        HashMap<String, FieldName> features = new HashMap<String, FieldName>();
+        attributeIndexMap = new HashMap<InputField, int[]>();
+        HashMap<String, InputField> features = new HashMap<String, InputField>();
 
-        for (FieldName fieldName : inputFields) {
-            features.put(fieldName.getValue(), fieldName);
+        for (InputField fieldName : inputFields) {
+            features.put(fieldName.getName().toString(), fieldName);
         }
 
         if(attributeSelectionAvailable) {
